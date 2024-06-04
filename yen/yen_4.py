@@ -4,6 +4,8 @@ import yfinance as yf
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import requests
+import pytz
+import numpy as np  # numpy를 추가합니다
 
 def send_slack_notification(message):
     """
@@ -16,17 +18,27 @@ def send_slack_notification(message):
     if response.status_code != 200:
         raise Exception(f"Request to Slack returned an error {response.status_code}, the response is:\n{response.text}")
 
-def download_data(period_weeks):
+def download_data(period_weeks, period_hours):
     """
     지정된 기간 동안의 Nikkei 225와 KRW/JPY 환율 데이터를 다운로드하는 함수
     :param period_weeks: int, 데이터를 다운로드할 기간(주)
+    :param period_hours: int, 데이터를 다운로드할 기간(시간)
     :return: tuple, Nikkei 225 데이터프레임과 KRW/JPY 데이터프레임
     """
     start = datetime.today() - timedelta(weeks=period_weeks)  # 시작 날짜
     end = datetime.today()  # 종료 날짜
     nikkei_data = yf.download('^N225', start=start, end=end)  # Nikkei 225 데이터 다운로드
-    krw_jpy_data = yf.download('KRWJPY=X', start=start, end=end)  # KRW/JPY 환율 데이터 다운로드
-    return nikkei_data, krw_jpy_data
+    krw_jpy_data = yf.download('KRWJPY=X', start=start, end=end, interval='1h')  # KRW/JPY 환율 데이터 다운로드 (1시간 간격)
+    
+    # 인덱스의 타임존을 UTC로 설정
+    nikkei_data.index = nikkei_data.index.tz_localize('UTC')
+    krw_jpy_data.index = krw_jpy_data.index.tz_convert('UTC')
+    
+    # 최근 24시간 동안의 데이터 필터링
+    now = datetime.now(pytz.utc)  # 타임존 정보 추가
+    last_24_hours_data = krw_jpy_data[krw_jpy_data.index >= (now - timedelta(hours=period_hours))]
+    
+    return nikkei_data, krw_jpy_data, last_24_hours_data
 
 def calculate_indicators(nikkei_data, krw_jpy_data):
     """
@@ -88,7 +100,7 @@ def provide_advice(suitable_conditions):
     else:
         return '4주 - 투자 보류'
 
-def create_result(period_weeks, indicators, conditions, advice, final_suitability):
+def create_result(period_weeks, indicators, conditions, advice, final_suitability, trend):
     """
     최종 결과를 생성하는 함수
     :param period_weeks: int, 데이터를 분석한 기간(주)
@@ -96,6 +108,7 @@ def create_result(period_weeks, indicators, conditions, advice, final_suitabilit
     :param conditions: tuple, 각 조건의 만족 여부를 나타내는 불리언 값들의 튜플
     :param advice: str, 투자 조언
     :param final_suitability: str, 최종 의견
+    :param trend: str, 최근 24시간 환율 추세
     :return: dict, 최종 결과를 포함하는 딕셔너리
     """
     # Nikkei 격차 퍼센트에 따른 조건문
@@ -121,7 +134,8 @@ def create_result(period_weeks, indicators, conditions, advice, final_suitabilit
         '조건3 (현재 Nikkei 갭 비율 > 52주 평균 Nikkei 갭 비율)': '적합' if conditions[2] else '부적합',
         '조건4 (현재 JPY/KRW 환율 < 적정 환율)': '적합' if conditions[3] else '부적합',
         '전체조건접합성여부': final_suitability,
-        '투자매수매도 조언': trading_advice
+        '투자매수매도 조언': trading_advice,
+        '최근 24시간 환율 추세': trend
     }
 
 def record_to_sheet(data):
@@ -138,16 +152,33 @@ def record_to_sheet(data):
     sheet = client.open("적정환율알림서비스").worksheet("엔_4주")
     
     # 데이터 기록
-    row = [data['현재 날짜'], data['기간']] + list(data.values())[2:]
+    row = [data['현재 날짜'], data['기간']] + [str(value) for value in list(data.values())[2:]]
     sheet.append_row(row)
 
-def calculate_exchange_rate(period_weeks):
+def calculate_trend(last_24_hours_data):
+    """
+    최근 24시간 동안의 환율 추세를 계산하는 함수
+    :param last_24_hours_data: DataFrame, 최근 24시간 동안의 KRW/JPY 환율 데이터
+    :return: str, 상승추세, 하락추세 또는 보합
+    """
+    hourly_changes = last_24_hours_data['Close'].diff() > 0
+    trend_score = hourly_changes.sum()
+    
+    if trend_score > 12:
+        return '상승추세'
+    elif trend_score < 12:
+        return '하락추세'
+    else:
+        return '보합'
+
+def calculate_exchange_rate(period_weeks, period_hours=24):
     """
     주요 로직을 실행하는 함수
     :param period_weeks: int, 데이터를 분석할 기간(주)
+    :param period_hours: int, 최근 시간 단위로 분석할 시간 (기본 24시간)
     """
     # 데이터 다운로드
-    nikkei_data, krw_jpy_data = download_data(period_weeks)
+    nikkei_data, krw_jpy_data, last_24_hours_data = download_data(period_weeks, period_hours)
     
     # 지표 계산
     indicators = calculate_indicators(nikkei_data, krw_jpy_data)
@@ -160,8 +191,11 @@ def calculate_exchange_rate(period_weeks):
     advice = provide_advice(suitable_conditions)
     final_suitability = advice
     
+    # 최근 24시간 추세 계산
+    trend = calculate_trend(last_24_hours_data)
+    
     # 결과 생성
-    result = create_result(period_weeks, indicators, conditions, advice, final_suitability)
+    result = create_result(period_weeks, indicators, conditions, advice, final_suitability, trend)
     
     # 결과 출력
     for key, value in result.items():
@@ -175,5 +209,5 @@ def calculate_exchange_rate(period_weeks):
     if suitable_conditions >= 3 or final_suitability == '지금 바로 투자하세요':
         send_slack_notification(f"{advice}: {final_suitability}")
 
-# 4 기준으로 데이터 계산
+# 4주 기준으로 데이터 계산
 calculate_exchange_rate(4)
