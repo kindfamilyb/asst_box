@@ -10,7 +10,7 @@ def send_slack_notification(message):
     슬랙에 알림을 보내는 함수
     :param message: str, 슬랙으로 보낼 메시지
     """
-    webhook_url = 'https://hooks.slack.com/services/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'  # 여기에 실제 웹훅 URL을 넣으세요.
+    webhook_url = 'https://hooks.slack.com/services/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'  # 여기에 실제 웹훅 URL을 넣으세요.
     payload = {'text': message}
     response = requests.post(webhook_url, json=payload)
     if response.status_code != 200:
@@ -82,11 +82,11 @@ def provide_advice(suitable_conditions):
     :return: str, 투자 조언
     """
     if suitable_conditions == 4:
-        return '지금 바로 투자하세요'
+        return '52주 - 지금 바로 투자하세요'
     elif suitable_conditions >= 3:
-        return '투자 시작해도 됨'
+        return '52주 - 투자 시작해도 됨'
     else:
-        return '투자 보류'
+        return '52주 - 투자 보류'
 
 def create_result(period_weeks, indicators, conditions, advice, final_suitability):
     """
@@ -135,7 +135,7 @@ def record_to_sheet(data):
     client = gspread.authorize(creds)
     
     # 스프레드시트 열기 및 시트 선택
-    sheet = client.open("적정환율알림서비스").worksheet("52주기준엔화적정환율알림")
+    sheet = client.open("적정환율알림서비스").worksheet("엔_52주")
     
     # 데이터 기록
     row = [data['현재 날짜'], data['기간']] + list(data.values())[2:]
@@ -175,5 +175,5 @@ def calculate_exchange_rate(period_weeks):
     if suitable_conditions >= 3 or final_suitability == '지금 바로 투자하세요':
         send_slack_notification(f"{advice}: {final_suitability}")
 
-# 52 기준으로 데이터 계산
+# 52주 기준으로 데이터 계산
 calculate_exchange_rate(52)

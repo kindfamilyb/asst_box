@@ -132,7 +132,7 @@ def record_to_sheet(data):
     client = gspread.authorize(creds)
     
     # 스프레드시트 열기 및 시트 선택
-    sheet = client.open("적정환율알림서비스").worksheet("52주기준달러적정환율알림")
+    sheet = client.open("적정환율알림서비스").worksheet("달러_52주")
     
     # 데이터 기록
     row = [data['현재 날짜'], data['기간']] + list(data.values())[2:]

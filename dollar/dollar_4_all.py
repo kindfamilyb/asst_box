@@ -5,7 +5,7 @@ from oauth2client.service_account import ServiceAccountCredentials  # 구글 서
 import os  # 환경 변수 접근을 위한 os 모듈 임포트
 
 def download_data(ticker, start_date, end_date):  # 데이터를 다운로드하는 함수 정의
-    """Download historical data for a given ticker from Yahoo Finance."""  # 함수 설명
+    """Yahoo Finance에서 주어진 티커의 과거 데이터를 다운로드합니다."""  # 함수 설명
     try:
         data = yf.download(ticker, start=start_date, end=end_date)  # 주어진 티커의 데이터를 다운로드
         if data.empty:

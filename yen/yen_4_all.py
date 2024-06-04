@@ -98,7 +98,7 @@ def record_to_sheet(data):
     creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('GOOGLE_APPLICATION_CREDENTIALS'), scope)
     client = gspread.authorize(creds)
 
-    sheet = client.open("적정환율알림서비스").worksheet("4주기준엔화전체기간적정환율예상수익")
+    sheet = client.open("적정환율알림서비스").worksheet("엔_4주_백테스트")
 
     sheet.clear()
 
