@@ -11,6 +11,8 @@ def send_slack_notification(message):
         :param message: str, 슬랙으로 보낼 메시지
     """
     webhook_url = os.getenv('SLACK_WEBHOOK_URL')  # 환경 변수에서 웹훅 URL을 가져옵니다.
+    if not webhook_url:
+        raise ValueError("SLACK_WEBHOOK_URL environment variable not set.")
     payload = {'text': message}
     response = requests.post(webhook_url, json=payload)
     if response.status_code != 200:
@@ -71,10 +73,6 @@ def calculate_indicators(gold_data, silver_data, usd_krw_data):
     gold_price_krw_g = round(today_gold_g * today_usd_krw, 2)  # 현재 금 가격 (KRW/g)
     silver_price_krw_g = round(today_silver_g * today_usd_krw, 2)  # 현재 은 가격 (KRW/g)
     
-    # 현재 금, 은 가격을 KRW/온스로 변환
-    gold_price_krw_oz = round(today_gold * today_usd_krw, 2)  # 현재 금 가격 (KRW/온스)
-    silver_price_krw_oz = round(today_silver * today_usd_krw, 2)  # 현재 은 가격 (KRW/온스)
-
     avg_gold = round(gold_data['Close'].mean(), 2)  # 평균 금 가격 (USD/온스)
     gold_estimate = round(avg_gold, 2)  # 적정 금 가격 (USD/온스)
     gold_estimate_g = round(gold_estimate / 31.1035, 2)  # 적정 금 가격 (USD/g)
@@ -84,12 +82,10 @@ def calculate_indicators(gold_data, silver_data, usd_krw_data):
     trend_24h = calculate_trend_24h()  # 24시간 가격 변동 추세
 
     return {
-        'today_gold': today_gold,
-        'today_silver': today_silver,
+        'today_gold_krw_g': gold_price_krw_g,
+        'today_silver_krw_g': silver_price_krw_g,
         'gold_silver_ratio': gold_silver_ratio,
         'trend_24h': trend_24h,
-        'gold_price_krw_oz': gold_price_krw_oz,
-        'silver_price_krw_oz': silver_price_krw_oz,
         'gold_estimate_krw_g': gold_estimate_krw_g,
         # 'expected_return': expected_return
     }
@@ -129,8 +125,8 @@ def create_result(period_weeks, indicators, conditions, advice, final_suitabilit
         '기간': f'{period_weeks}주',
         '적정 금 가격 (KRW/g)': f'{indicators["gold_estimate_krw_g"]} 원',
         # '예상 수익률': f'{indicators["expected_return"]}%',
-        '현재 금 가격 (KRW/온스)': f'{indicators["gold_price_krw_oz"]} 원',
-        '현재 은 가격 (KRW/온스)': f'{indicators["silver_price_krw_oz"]} 원',
+        '현재 금 가격 (KRW/g)': f'{indicators["today_gold_krw_g"]} 원',
+        '현재 은 가격 (KRW/g)': f'{indicators["today_silver_krw_g"]} 원',
         '금/은 비율': f'{indicators["gold_silver_ratio"]}',
         '24시간 가격 변동 추세': indicators['trend_24h'],
         '조건1 (금/은 비율 > 80)': '적합' if conditions[0] else '부적합',
